@@ -32,6 +32,9 @@
 @r4 = gpio interupt// 1 = "."  // 2 = "-"
 @r5 = Alarm interupt// 1 = "/space/"  // 2 = "enter"
 @r6 = level
+@r7 = lives
+
+@r9 = used in interupt handling for time checks
 
 @TODO: ARM = input handling, fix the level selection and any alarm bugs
 @       C = functions listed to do 
@@ -43,7 +46,7 @@ main_asm:
     bl    create_gpio_isr
 
 Start_game:
-    mov r6, #1
+    mov r6, #0
     bl start_screen                     @needs c
     bl level_select                     @needs c
 
@@ -71,22 +74,59 @@ level2:
 level_selected:                                                 
     movs    r4, #3                                              @ r4 gpio interupt
     movs    r5, #0                                              @ r5 alarm interrupts
+    movs    r7, #3
 
 no_input:
     bl      new_alarm                                           @ Set the alarm
     wfi                                                         @ Wait for interrupt
-    bl      store_input              @needs c
+    bl      store_input              @needs c  /input r4, 1= dot , 2= dash
     cmp     r4, #3                        
     beq     Skip                                  
     movs    r4, #0                                              @ Reset dot or dash
 
 Skip:
-    bl check_game_progress          @needs c
+    bl check_game_progress          @needs c  /r0// 0= complete / 1=loss/ 2=still playing
     cmp r0, #0
     beq completed                   @still needs to be done
     cmp r0, #1
-    beq Start_game                                              @restart on loss
+    beq loser                       @restart on loss
     b no_input
+
+loser:
+    sub r7, r7, #1
+    cmp r7, #0
+    beq you_lost
+    bl incorrect_msg                @needs c
+    b no_input
+
+you_lost:
+    bl game_over_msg                @needs c
+    b Start_game
+
+completed:
+    bl get_level
+    cmp r0, #1
+    beq level1_completed
+    cmp r0, #2
+    beq level2_completed
+
+level1_completed:
+    bl level_complete_msg       @ needs c
+    movs r0, #2
+    bl set_level
+    b finish_level
+
+level2_completed:
+    bl level_complete_msg       @ needs c
+    movs r0, #3
+    bl set_level
+    b finish_level
+
+finish_level:
+    b start
+
+
+
 
 
 
@@ -201,10 +241,9 @@ falling_edge:
     
     bl      get_time
     movs    r1, r9                                              @needs c function
-    bl      get_differnce                                       @needs c functiion
+    bl      get_differnce            @needs c functiion  // difference in time between r0, r1
     movs    r9, r0
     
-    movs    r0, r9
     movs    r9, #0                                              
     cmp     r0, #DOT                                            
     blt     input_dot                                           
@@ -225,4 +264,3 @@ input_complete:
 @ Set data alignment
 .data
     .align 4
-
